@@ -1,4 +1,3 @@
-import e from "express";
 import asyncHandler from "express-async-handler"
 
 const registerUser = asyncHandler(async (req, res) => {
