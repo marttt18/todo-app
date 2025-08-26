@@ -1,33 +1,25 @@
-// Routues for handling here are private
-// The user must be authenticated to access these routes
+// Routes for handling tasks (private - requires authentication)
 
 import express from 'express';
+import { 
+    getTasks, 
+    createTask, 
+    updateTask, 
+    deleteAllTasks, 
+    deleteTask 
+} from '../controllers/tasksController.js';
 
 const router = express.Router();
 
-// Display all tasks
-router.get('/getTasks', (req, res) => {
-    res.send('Hello World!');
-});
+// /api/tasks
+router.route('/')
+    .get(getTasks)       // Display all tasks
+    .post(createTask)   // Add a task
+    .delete(deleteAllTasks); // Delete all tasks
 
-// Add a task
-router.post('/createTask', (req, res) => {
-    res.send('Hello World!');
-});
-
-// Update a task by id
-router.get('/createNote:id', (req, res) => {
-    res.send('Hello World!');
-});
-
-// Delete all tasks
-router.get('/createNote', (req, res) => {
-    res.send('Hello World!');
-});
-
-// Delete a task by id
-router.delete('/deleteNote:id', (req, res) => {
-    res.send('Hello World!');
-});
+// /api/tasks/:id
+router.route('/:id')
+    .put(updateTask)     // Update a task by id
+    .delete(deleteTask); // Delete a task by id
 
 export default router;
