@@ -5,37 +5,110 @@ import Task from '../models/taskModel.js';
 //@desc Get all tasks
 //@route GET /api/tasks/
 const getTasks = asyncHandler(async (req, res) => {
-    const tasks = await Task.find({});
+    const tasks = await Task.find({}); // the {} is an empty filter object -- this returns an array of tasks
 
-    if (!tasks) {
-        //res.status(404);
-        //throw new Error('No tasks found'); // no need to throw an error because there might be no task set yet
-        res.status(200).json({title: "No Tasks Found"}, []); // return an empty array if no tasks found
+    if (tasks.length === 0) {
+        return res.status(200).json({ 
+                message: "No Tasks Found",
+                task: []
+            });
     }
-    res.status(200).json(tasks); // Will this return an array of tasks? Yes, it will return an array of tasks. array of objects
+
+    // Return the tasks
+    res.status(200).json(tasks); 
 });
 
 //@desc Create a task
 //@route POST /api/tasks/
 const createTask = asyncHandler(async (req, res) => {
-    res.json({ message: 'Create Task' });
+    const { title, description, deadline } = req.body;
+    const status = "pending"; // default status
+
+    if (!title) {
+        res.status(400);
+        throw new Error('Task title is required');
+    }
+
+    // Deadline is optional, but what if there is a deadline? We need to validate it.
+    if (deadline && isNaN(Date.parse(deadline))) {
+        res.status(400);
+    }
+
+    const task = await Task.create({
+        title,
+        description,
+        status,
+        deadline
+    });
+
+    if (task) {
+        res.status(201).json(task); // return the created task
+    } else {
+        res.status(400);
+        throw new Error('Invalid task data');
+    }
 });
 
 //@desc Update a task by id
 //@route PUT /api/tasks/:id
 const updateTask = asyncHandler(async (req, res) => {
+    // Verify if a task with the given id exists
+    const task = await Task.findById(req.params.id);
+
+    if (!task) {
+        res.status(404);
+        throw new Error('Task not found');
+    }
+
+    // Update the task with the new data from req.body
+    // Q: is it efficient to use this method if we are just updating the status of the task?
+    // A: No, it is not efficient. But for simplicity, we will use this method.
+    // In a real-world application, we might want to use a more efficient method like findByIdAndUpdate.
+    // Do we need to create a seperate endpoint for updating just the status of the task?
+    const { title, description, status, deadline } = req.body;
+    
     res.json({ message: `Update Task ${req.params.id}` });
 });
 
 //@desc Delete all tasks
 //@route DELETE /api/tasks/
 const deleteAllTasks = asyncHandler(async (req, res) => {
-    res.json({ message: 'Delete All Tasks' });
+    const result = await Task.deleteMany({}); // what does this return? An object with the number of deleted documents. So we can return that number to the user
+    // how to delete the task and assign the list of tasks to a variable? You can use the findByIdAndDelete method. But in this case we are deleting all tasks, so we use deleteMany.
+    if (result.deletedCount === 0) { // what does result variable contain? give me an example
+        res.status(404).json({ message: 'No tasks to delete' });
+    } else {
+        res.status(200).json({ message: `Deleted ${result.deletedCount} tasks` });
+    }
 });
 
 //@desc Delete task by id
 //@route DELETE /api/tasks/:id
 const deleteTask = asyncHandler(async (req, res) => {
+    // Validate if a task with the given id exists
+    const task = await Task.findById(req.params.id);
+
+    if (!task) {
+        res.status(404);
+        throw new Error('Task not found');
+    }
+
+    const taskDeleted = await task.remove(); // remove the task
+    if (!taskDeleted) {
+        res.status(500);
+        throw new Error('Failed to delete the task');
+    }
+
+    // can we just write it like this?
+    // const task = await Task.findByIdAndDelete(req.params.id);
+    // if (!task) {
+    //     res.status(404);
+    //     throw new Error('Task not found');
+    // }
+
+    // Yes, we can. But in this case we want to first check if the task exists before deleting it.
+    // But we can just state that the task does not exist if the task is null after the deletion attempt.
+
     res.json({ message: 'Delete Task by ID' });
 });
 
