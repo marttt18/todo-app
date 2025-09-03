@@ -7,13 +7,13 @@ import Task from '../models/taskModel.js';
 const getTasks = asyncHandler(async (req, res) => {
     const tasks = await Task.find({}); // the {} is an empty filter object -- this returns an array of tasks
 
-    if (tasks.length === 0) {
+    // why not just if (!tasks)? Because tasks is an array, and an empty array is truthy in JavaScript. So we need to check the length of the array to see if it is empty.
+    if (tasks.length === 0) { 
         return res.status(200).json({ 
                 message: "No Tasks Found",
                 task: []
             });
     }
-
     // Return the tasks
     res.status(200).json(tasks); 
 });
@@ -22,23 +22,37 @@ const getTasks = asyncHandler(async (req, res) => {
 //@route POST /api/tasks/
 const createTask = asyncHandler(async (req, res) => {
     const { title, description, deadline } = req.body;
-    const status = "pending"; // default status
-
-    if (!title) {
+    
+    // Validate title
+    if (!title || !title.trim()) {
         res.status(400);
         throw new Error('Task title is required');
     }
 
-    // Deadline is optional, but what if there is a deadline? We need to validate it.
-    if (deadline && isNaN(Date.parse(deadline))) {
+    // Validate the length of the title
+    if (title.trim().length < 3 || title.trim().length > 100) {
         res.status(400);
+        throw new Error('Task title must be between 3 and 100 characters');
+    }
+
+    // Validate deadline (optional)    
+    if (deadline) {
+        const parsedDeadline = Date.parse(deadline); // returns NaN if the date is invalid
+
+        if (isNaN(parsedDate)) {
+            res.status(400);
+            throw new Error('Invalid date format for deadline');
+        }
+        if (parsedDeadline < new Date()) {
+            throw new Error('Deadline must be a future date');
+        }
     }
 
     const task = await Task.create({
-        title,
-        description,
-        status,
-        deadline
+        title: title.trim(),
+        description: description?description.trim(): "",
+        status: "pending", // default value
+        deadline: deadline ? new Date(deadline) : null
     });
 
     if (task) {
