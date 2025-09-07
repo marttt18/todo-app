@@ -2,6 +2,11 @@
 import asyncHandler from 'express-async-handler';
 import Task from '../models/taskModel.js';
 
+// TODO: make it possible to filter tasks by status and deadline
+// Example: /api/tasks?status=pending
+// Example: /api/tasks?deadline=2023-12-31
+
+// PROBLEM: We need a specific id because this will get all the tasks in the database regardless of the user.
 //@desc Get all tasks
 //@route GET /api/tasks/
 const getTasks = asyncHandler(async (req, res) => {
@@ -104,6 +109,8 @@ const updateTask = asyncHandler(async (req, res) => {
 const deleteAllTasks = asyncHandler(async (req, res) => {
     const result = await Task.deleteMany({}); // what does this return? An object with the number of deleted documents. So we can return that number to the user
     // how to delete the task and assign the list of tasks to a variable? You can use the findByIdAndDelete method. But in this case we are deleting all tasks, so we use deleteMany.
+
+    // Idea: remove all tasks that are completed, 
     if (result.deletedCount === 0) { // what does result variable contain? give me an example
         res.status(404).json({ message: 'No tasks to delete' });
     } else {
