@@ -60,7 +60,7 @@ const createTask = asyncHandler(async (req, res) => {
     } else {
         res.status(400);
         throw new Error('Invalid task data');
-    }
+    }  
 });
 
 //@desc Update a task by id
@@ -74,14 +74,29 @@ const updateTask = asyncHandler(async (req, res) => {
         throw new Error('Task not found');
     }
 
-    // Update the task with the new data from req.body
-    // Q: is it efficient to use this method if we are just updating the status of the task?
-    // A: No, it is not efficient. But for simplicity, we will use this method.
-    // In a real-world application, we might want to use a more efficient method like findByIdAndUpdate.
-    // Do we need to create a seperate endpoint for updating just the status of the task?
+    // Destruture the fields from the request body
     const { title, description, status, deadline } = req.body;
+
+    const updatedFields = {};
+    // Check and validate each field before adding it to the updatedFields object
+    if (title) updatedFields.title = title.trim();
+    if (description) updatedFields.description = description.trim();
+    if (status) updatedFields.status = status;
+    if (deadline) updatedFields.deadline = new Date(deadline); 
+
+    // Update the task with the new fields
+    const updatedTask = await Task.findByIdAndUpdate(
+        req.params.id, 
+        { $set: updatedFields }, // $set operator to update only the specified fields
+        { new: true, runValidators: true }); // return the updated document(because updating a document returns the old document before the update) and run validators
     
-    res.json({ message: `Update Task ${req.params.id}` });
+    // If the updated document is not returned, then it is a server error
+    if (!updatedTask) {
+        res.status(500);
+        throw new Error('Failed to update the task');
+    }
+
+    res.status(200).json({ message: `Update Task ${req.params.id}` });
 });
 
 //@desc Delete all tasks
