@@ -11,7 +11,7 @@ const tasksSchema = new mongoose.Schema({
         required: [true, "Task title is required"],
         trim: true, // why do we need this? to remove whitespace from both ends of a string. why do we need to remove whitespace? because users might accidentally add spaces before or after the title.
         minlength: [3, "Task title must be at least 3 characters"],
-        maxlength: [100, "Task title must be less than 100 characters"]  
+        maxlength: [100, "Task title must be less than 100 characters"]
     },
     taskDescription: {
         type: String,
@@ -27,20 +27,30 @@ const tasksSchema = new mongoose.Schema({
     taskDeadline: {
         type: Date, // What is the expected format for Date? ISO 8601 (YYYY-MM-DDTHH:mm:ss.sssZ)
         required: [false, "Deadline is optional"] // it is false by default but is it better to specify? 
-    }
+    },
+    type: {
+        type: String,
+        enum: ["work", "personal"],
+        default: "personal"
+    },
+    user: { // reference to the User model
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true
+    } 
     // Why not just add the timestamps here?
     // timestamps: true
     // Answer: Mongoose will not treat timestamps as a schema option. It will instead assume you are defining a field named timestamps with the value true.
 },
-// Second object: schema options (behaviors)
-{
-    // this will add createdAt and updatedAt fields to the schema
-    timestamps: true
-});     
+    // Second object: schema options (behaviors)
+    {
+        // this will add createdAt and updatedAt fields to the schema
+        timestamps: true
+    });
 
 // STEP 3: Create a model and export it
 export default mongoose.model("Task", tasksSchema); // "Task" is the name of the collection in the database. 
-// Mongoose will automatically pluralize it to "tasks". Why? 
+// Mongoose will automatically pluralize it to "tasks". Why?
 // Because a collection is a group of documents.
 // A document is a single record in a collection.
 // A collection is like a table in a relational database.

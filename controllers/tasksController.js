@@ -10,7 +10,21 @@ import Task from '../models/taskModel.js';
 //@desc Get all tasks
 //@route GET /api/tasks/
 const getTasks = asyncHandler(async (req, res) => {
-    const tasks = await Task.find({}); // the {} is an empty filter object -- this returns an array of tasks
+    // Q: How will i know if what type of query does the user provided since we have filtering options? 
+    
+    // Get task based from its type
+    if (req.query.type) {
+        const task = await Task.find({ type: req.query.type, user: req.user.id });
+        return res.status(200).json(task);
+    }
+
+    // Get task based from its type and status
+    if (req.query.type && req.query.status) {
+        const task = await Task.find({ type: req.query.type, status: req.query.status, user: req.user.id });
+    }
+
+    // Get all tasks from the database based from the user ID
+    const tasks = await Task.find({ user: req.user.id });
 
     // why not just if (!tasks)? Because tasks is an array, and an empty array is truthy in JavaScript. So we need to check the length of the array to see if it is empty.
     if (tasks.length === 0) { 
@@ -95,13 +109,15 @@ const updateTask = asyncHandler(async (req, res) => {
         { $set: updatedFields }, // $set operator to update only the specified fields
         { new: true, runValidators: true }); // return the updated document(because updating a document returns the old document before the update) and run validators
     
-    // If the updated document is not returned, then it is a server error
+    /* If there had an issue with the update, return a server error, it will be automatically handled by express-async-handler
+
+        If the updated document is not returned, then it is a server error
     if (!updatedTask) {
         res.status(500);
         throw new Error('Failed to update the task');
-    }
+    } // this is useless because we already checked if the task exists above -- we can remove this */
 
-    res.status(200).json({ message: `Update Task ${req.params.id}` });
+    res.status(200).json({ message: `Update Task ${req.params.id}`, updatedTask: updatedTask } );
 });
 
 //@desc Delete all tasks
