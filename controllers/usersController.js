@@ -2,10 +2,14 @@ import User from "../models/userModel.js"
 import asyncHandler from "express-async-handler"
 import bcrypt from "bcrypt"; // for hashing passwords
 
+// Get users
+const getUsers = asyncHandler(async (req, res) => {
+    res.send(await User.find({}));
+});
 
 const registerUser = asyncHandler(async (req, res) => {
-    const { name, email, password } = req.body;
-    if (!name || !email || !password) {
+    const { username, email, password } = req.body;
+    if (!username || !email || !password) {
         res.status(400);
         throw new error("Please add all fields");
     }
@@ -23,7 +27,7 @@ const registerUser = asyncHandler(async (req, res) => {
 
     // Create user
     const user = await User.create({
-        name,
+        username,
         email,
         password: hashedPassword
     });
@@ -62,5 +66,5 @@ const currentUser = asyncHandler(async (req, res) => {
 // Answer: we can export multiple functions from this file and import them in server.js.
 // For example, we can export registerUser, loginUser, currentUser and import them in server.js.
 
-export { registerUser, loginUser, currentUser };
+export { registerUser, loginUser, currentUser, getUsers };
 
