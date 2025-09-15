@@ -2,46 +2,70 @@
 import asyncHandler from 'express-async-handler';
 import Task from '../models/taskModel.js';
 
-// TODO: make it possible to filter tasks by status and deadline
-// Example: /api/tasks?status=pending
-// Example: /api/tasks?deadline=2023-12-31
-
-// PROBLEM: We need a specific id because this will get all the tasks in the database regardless of the user.
 //@desc Get all tasks
 //@route GET /api/tasks/
 const getTasks = asyncHandler(async (req, res) => {
-    // Q: How will i know if what type of query does the user provided since we have filtering options? 
-    
-    // Get task based from its type
-    if (req.query.type) {
-        const task = await Task.find({ type: req.query.type, user: req.user.id });
-        return res.status(200).json(task);
+    // To implement:
+    // 1. filter by type (work, personal)
+    // 2. filter by status (pending, in-progress, completed)
+    // 3. filter by type and status
+    // 4. filter by type and sort by deadline
+    // 5. filter by status and sort by deadline
+    // 6. filter by type, status, and sort by deadline
+    // 7. sort by deadline (ascending, descending)
+    // 8. no filter, no sort (get all tasks)
+
+    // what is the frontend pov when a button for sorting by deadline is cliked? what should be the url?
+
+    // Destructure the query parameters
+    const { type, status, sort } = req.query;
+
+    // Valid values for filtering and sorting
+    const validTypes = ["work", "personal"];
+    const validStatus = ["pending", "in-progress", "completed"];
+    const validSortOptions = ["deadline", "-deadline", "createdAt", "-createdAt"]
+
+    // Validate query parameters (if provided)
+    if (type && !validTypes.includes(type)) {
+        res.status(400);
+        throw new Error('Invalid type value. Valid values are "work" or "personal".');
     }
 
-    // Get task based from its type and status
-    if (req.query.type && req.query.status) {
-        const task = await Task.find({ type: req.query.type, status: req.query.status, user: req.user.id });
+    if (status && !validStatus.includes(status)) {
+        res.status(400);
+        throw new Error('Invalid status value. Valid values are "pending", "in-progress", or "completed".');
     }
 
-    // Get all tasks from the database based from the user ID
-    const tasks = await Task.find({ user: req.user.id });
-
-    // why not just if (!tasks)? Because tasks is an array, and an empty array is truthy in JavaScript. So we need to check the length of the array to see if it is empty.
-    if (tasks.length === 0) { 
-        return res.status(200).json({ 
-                message: "No Tasks Found",
-                task: []
-            });
+    if (sort && !validSortOptions.includes(sort)) {
+        res.status(400);
+        throw new Error('Invalid sort value. Valid values are "deadline", "-deadline", "createdAt", or "-createdAt".');
     }
+
+    /* Instead of creating multiple if statements for each combination of filters, 
+    we can use a single query object */
+
+    // Always filter by user ID
+    const query = { user: req.user.id }; 
+    // Add type filter if provided in the query object
+    if (type) query.type = type;
+    if (status) query.status = status;
+
+    // Determine the sorting criteria
+    const sortCriteria = sort ? { [sort.replace('-', '')]: sort.startsWith('-') ? -1 : 1 } : {};
+    const sortOption = sort || 'createdAt'; // Default to createdAt if no sort option is provided
+
+    // Fetch tasks from the database based on the constructed query and sort criteria
+    const tasks = Task.find(query).sort(sortCriteria);
+
     // Return the tasks
-    res.status(200).json(tasks); 
+    res.status(200).json(tasks);
 });
 
 //@desc Create a task
 //@route POST /api/tasks/
 const createTask = asyncHandler(async (req, res) => {
-    const { title, description, deadline } = req.body;
-    
+    const { title, description, deadline, type } = req.body;
+
     // Validate title
     if (!title || !title.trim()) {
         res.status(400);
@@ -69,9 +93,11 @@ const createTask = asyncHandler(async (req, res) => {
 
     const task = await Task.create({
         title: title.trim(),
-        description: description?description.trim(): "",
+        description: description ? description.trim() : "",
         status: "pending", // default value
-        deadline: deadline ? new Date(deadline) : null
+        deadline: deadline ? new Date(deadline) : null,
+        type: type,
+        user: req.user.id // reference id of the user who created the task
     });
 
     if (task) {
@@ -79,7 +105,7 @@ const createTask = asyncHandler(async (req, res) => {
     } else {
         res.status(400);
         throw new Error('Invalid task data');
-    }  
+    }
 });
 
 //@desc Update a task by id
@@ -94,36 +120,36 @@ const updateTask = asyncHandler(async (req, res) => {
     }
 
     // Destruture the fields from the request body
-    const { title, description, status, deadline } = req.body;
+    const { title, description, status, type, deadline } = req.body;
 
     const updatedFields = {};
     // Check and validate each field before adding it to the updatedFields object
     if (title) updatedFields.title = title.trim();
     if (description) updatedFields.description = description.trim();
     if (status) updatedFields.status = status;
-    if (deadline) updatedFields.deadline = new Date(deadline); 
+    if (type) updatedFields.type = type;
+    if (deadline) updatedFields.deadline = new Date(deadline);
 
     // Update the task with the new fields
     const updatedTask = await Task.findByIdAndUpdate(
-        req.params.id, 
+        req.params.id,
         { $set: updatedFields }, // $set operator to update only the specified fields
         { new: true, runValidators: true }); // return the updated document(because updating a document returns the old document before the update) and run validators
-    
-    /* If there had an issue with the update, return a server error, it will be automatically handled by express-async-handler
 
+    /* If there had an issue with the update, return a server error, it will be automatically handled by express-async-handler
         If the updated document is not returned, then it is a server error
     if (!updatedTask) {
         res.status(500);
         throw new Error('Failed to update the task');
     } // this is useless because we already checked if the task exists above -- we can remove this */
 
-    res.status(200).json({ message: `Update Task ${req.params.id}`, updatedTask: updatedTask } );
+    res.status(200).json({ message: `Update Task ${req.params.id}`, updatedTask: updatedTask });
 });
 
 //@desc Delete all tasks
 //@route DELETE /api/tasks/
 const deleteAllTasks = asyncHandler(async (req, res) => {
-    const result = await Task.deleteMany({}); // what does this return? An object with the number of deleted documents. So we can return that number to the user
+    const result = await Task.deleteMany({ id: req.user.id }); // what does this return? An object with the number of deleted documents. So we can return that number to the user
     // how to delete the task and assign the list of tasks to a variable? You can use the findByIdAndDelete method. But in this case we are deleting all tasks, so we use deleteMany.
 
     // Idea: remove all tasks that are completed, 
@@ -137,7 +163,7 @@ const deleteAllTasks = asyncHandler(async (req, res) => {
 //@desc Delete task by id
 //@route DELETE /api/tasks/:id
 const deleteTask = asyncHandler(async (req, res) => {
-    // Validate if a task with the given id exists
+    /* // Validate if a task with the given id exists
     const task = await Task.findById(req.params.id);
 
     if (!task) {
@@ -145,23 +171,17 @@ const deleteTask = asyncHandler(async (req, res) => {
         throw new Error('Task not found');
     }
 
-    const taskDeleted = await task.remove(); // remove the task
-    if (!taskDeleted) {
-        res.status(500);
-        throw new Error('Failed to delete the task');
-    }
+    //const taskDeleted = await task.remove(); // remove the task -- this is deprecated
+    await task.deleteOne();  */
 
     // can we just write it like this?
-    // const task = await Task.findByIdAndDelete(req.params.id);
-    // if (!task) {
-    //     res.status(404);
-    //     throw new Error('Task not found');
-    // }
+    const task = await Task.findByIdAndDelete(req.params.id);
+    if (!task) throw new Error("Task not found");
 
     // Yes, we can. But in this case we want to first check if the task exists before deleting it.
     // But we can just state that the task does not exist if the task is null after the deletion attempt.
 
-    res.json({ message: 'Delete Task by ID' });
+    res.status(200).json({ deletedTask: task });
 });
 
 export { getTasks, createTask, updateTask, deleteAllTasks, deleteTask };
