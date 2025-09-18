@@ -1,10 +1,11 @@
 import User from "../models/userModel.js"
 import asyncHandler from "express-async-handler"
 import bcrypt from "bcrypt"; // for hashing passwords
+import generateToken from "../utils/generateToken.js";
 
 // Get users
 const getUsers = asyncHandler(async (req, res) => {
-    res.send(await User.find({}));
+    res.status.json(await User.find({})); 
 });
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -42,9 +43,14 @@ const registerUser = asyncHandler(async (req, res) => {
     // yes, but arent we doing that with User.create? since the name, email, password are already in req.body (they are the same value? and considering that they are already validtaed and error are ahndled above)
     // :because req.body may contain other fields that we dont want to save in the database
 
-    console.log("User created: ", user);
     if (user) {
-        res.status(201).json({ title: "User Created Successfully1", _id: user.id, email: user.email });
+        res.status(201).json({
+            title: "User Created Successfully1",
+            _id: user._id,
+            username: user.username,
+            email: user.email,
+            token: generateToken({ id: user._id }) // generate a token with the user id as payload
+        });
     } else {
         res.status(400);
         throw new Error("User data is not valid"); // why? we already validated the data above
@@ -56,7 +62,9 @@ const loginUser = asyncHandler(async (req, res) => {
 });
 
 const currentUser = asyncHandler(async (req, res) => {
-    res.send('Hello World!');
+    // What is the purpose of currentUser route? why do we need to know who the current user is?
+    const currentUser = req.user; // why req.user? because we set it in the authMiddleware.js
+    res.json(currentUser);
 });
 
 // how can we import this in server.js?
