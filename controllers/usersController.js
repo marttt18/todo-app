@@ -5,7 +5,7 @@ import generateToken from "../utils/generateToken.js";
 
 // Get users
 const getUsers = asyncHandler(async (req, res) => {
-    res.status.json(await User.find({})); 
+    res.status(200).json(await User.find({})); 
 });
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -58,7 +58,34 @@ const registerUser = asyncHandler(async (req, res) => {
 });
 
 const loginUser = asyncHandler(async (req, res) => {
-    res.send('Hello World!');
+    const { email, password } = req.body;
+    if (!email || !password) {
+        res.status(400);
+        throw new Error("All fields are mandatory");
+    }
+    const user = await User.findOne({ email });
+    // Check if the user exists
+    if (!user) {
+        res.status(401);
+        throw new Error("User not found");
+    }
+
+    // Compare password with hashedpassword
+    if (await bcrypt.compare(password, user.password)) {
+        // Generate token
+        const payload = {
+            username: user.username,  
+            email: user.email,
+            id: user.id
+        };
+        // Why do we need to include username and email in the payload? 
+        // Answer: It is not necessary to include them, but it can be useful for debugging purposes.
+        const accessToken = generateToken(payload);
+        res.status(200).json({ accessToken });
+    } else {
+        res.status(401);
+        throw new Error("Check your password and try again");
+    }
 });
 
 const currentUser = asyncHandler(async (req, res) => {
