@@ -74,9 +74,12 @@ const loginUser = asyncHandler(async (req, res) => {
     if (await bcrypt.compare(password, user.password)) {
         // Generate token
         const payload = {
-            username: user.username,  
-            email: user.email,
-            id: user.id
+            // Wrap the payload in an object
+            user: {
+                username: user.username,
+                email: user.email,
+                id: user.id
+            }
         };
         // Why do we need to include username and email in the payload? 
         // Answer: It is not necessary to include them, but it can be useful for debugging purposes.
