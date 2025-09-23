@@ -45,7 +45,7 @@ const getTasks = asyncHandler(async (req, res) => {
     we can use a single query object */
 
     // Always filter by user ID
-    const query = { user: req.user.id }; 
+    const query = { user_id: req.user.id };
     // Add type filter if provided in the query object
     if (type) query.type = type;
     if (status) query.status = status;
@@ -119,6 +119,16 @@ const updateTask = asyncHandler(async (req, res) => {
         throw new Error('Task not found');
     }
 
+    // Verify if the logged-in user matches the task owner
+    if (task.user_id.toString() !== req.user.id) {
+        res.status(403);
+        throw new Error('User not authorized to update other users task');
+    }
+    // Q: what is the difference betwen != and !== ?
+    // Q: In what scenario does a another user get to update a task that is not theirs? A: If the user is an admin, they might have the ability to update any task. But in this case, we are not implementing roles, so only the owner of the task can update it.
+    // Q: I mean how can a user get to update a task that is not theirs? A: If there is a bug in the code that allows it. But we are checking for that here, so it should be fine.
+    // Q: How can a user get to request to update a task that is not theirs in the first place. If the task displayed to them i
+
     // Destruture the fields from the request body
     const { title, description, status, type, deadline } = req.body;
 
@@ -149,7 +159,7 @@ const updateTask = asyncHandler(async (req, res) => {
 //@desc Delete all tasks
 //@route DELETE /api/tasks/
 const deleteAllTasks = asyncHandler(async (req, res) => {
-    const result = await Task.deleteMany({ id: req.user.id }); // what does this return? An object with the number of deleted documents. So we can return that number to the user
+    const result = await Task.deleteMany({ user_id: req.user.id }); // what does this return? An object with the number of deleted documents. So we can return that number to the user
     // how to delete the task and assign the list of tasks to a variable? You can use the findByIdAndDelete method. But in this case we are deleting all tasks, so we use deleteMany.
 
     // Idea: remove all tasks that are completed, 
@@ -175,12 +185,28 @@ const deleteTask = asyncHandler(async (req, res) => {
     await task.deleteOne();  */
 
     // can we just write it like this?
-    const task = await Task.findByIdAndDelete(req.params.id);
-    if (!task) throw new Error("Task not found");
+    // const task = await Task.findByIdAndDelete(req.params.id);
+    // if (!task) throw new Error("Task not found");
 
     // Yes, we can. But in this case we want to first check if the task exists before deleting it.
     // But we can just state that the task does not exist if the task is null after the deletion attempt.
+    const task = await Task.findById(req.params.id);
 
+    if (!task) {
+        res.status(404);
+        throw new Error("Task not found");
+    }
+
+    // Verify if the logged-in user matches the task owner
+    if (task.user_id.toString() !== req.user.id) {
+        res.status(403);
+        throw new Error('User not authorized to update other users task');
+    }
+
+    // Delete the task
+    await Task.findByIdAndDelete(req.params.id);
+
+    // Return the deleted task
     res.status(200).json({ deletedTask: task });
 });
 

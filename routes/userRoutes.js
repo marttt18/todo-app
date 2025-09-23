@@ -1,5 +1,6 @@
 import express from 'express';
 import { registerUser, loginUser, currentUser, getUsers } from '../controllers/usersController.js';
+import { validateToken } from '../middleware/validateToken.js';
 
 const router = express.Router();
 
@@ -13,6 +14,6 @@ router.post('/register', registerUser);
 router.post('/login', loginUser);
 
 // Current user - private route
-router.get('/current', currentUser);
+router.get('/current', validateToken, currentUser);
 
 export default router;
