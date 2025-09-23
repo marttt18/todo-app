@@ -6,6 +6,11 @@ import mongoose from "mongoose";
 // STEP 2: Create a schema
 const tasksSchema = new mongoose.Schema({
     // First object: schema paths (fields)
+    user_id: { // reference to the User model
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true
+    },
     taskTitle: {
         type: String,
         required: [true, "Task title is required"],
@@ -32,12 +37,7 @@ const tasksSchema = new mongoose.Schema({
         type: String,
         enum: ["work", "personal"],
         default: "personal"
-    },
-    user: { // reference to the User model
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true
-    } 
+    }
     // Why not just add the timestamps here?
     // timestamps: true
     // Answer: Mongoose will not treat timestamps as a schema option. It will instead assume you are defining a field named timestamps with the value true.

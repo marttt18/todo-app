@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { constants } from '../constants';
 
-const validateToken = (req, res, next) => {
+export const validateToken = (req, res, next) => {
     const authHeader = req.headers.authorization || req.headers.Authorization;
 
     // Check if the authorization header is present and starts with 'Bearer '
