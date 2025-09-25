@@ -48,14 +48,19 @@ const getTasks = asyncHandler(async (req, res) => {
     const query = { user_id: req.user.id };
     // Add type filter if provided in the query object
     if (type) query.type = type;
-    if (status) query.status = status;
+    // Map external query param 'status' to model field 'taskStatus'
+    if (status) query.taskStatus = status;
 
-    // Determine the sorting criteria
-    const sortCriteria = sort ? { [sort.replace('-', '')]: sort.startsWith('-') ? -1 : 1 } : {};
-    const sortOption = sort || 'createdAt'; // Default to createdAt if no sort option is provided
+    // Determine the sorting criteria (map 'deadline' to model field 'taskDeadline')
+    const sortFieldMap = { deadline: 'taskDeadline', createdAt: 'createdAt' };
+    const normalizedSortKey = sort ? sort.replace('-', '') : undefined;
+    const mappedSortKey = normalizedSortKey ? sortFieldMap[normalizedSortKey] : undefined;
+    const sortCriteria = mappedSortKey
+        ? { [mappedSortKey]: sort.startsWith('-') ? -1 : 1 }
+        : { createdAt: 1 };
 
     // Fetch tasks from the database based on the constructed query and sort criteria
-    const tasks = Task.find(query).sort(sortCriteria);
+    const tasks = await Task.find(query).sort(sortCriteria).exec();
 
     // Return the tasks
     res.status(200).json(tasks);
@@ -82,23 +87,39 @@ const createTask = asyncHandler(async (req, res) => {
     if (deadline) {
         const parsedDeadline = Date.parse(deadline); // returns NaN if the date is invalid
 
-        if (isNaN(parsedDate)) {
+        if (isNaN(parsedDeadline)) {
             res.status(400);
             throw new Error('Invalid date format for deadline');
         }
-        if (parsedDeadline < new Date()) {
+        if (parsedDeadline <= Date.now()) {
+            res.status(400);
             throw new Error('Deadline must be a future date');
         }
     }
 
-    const task = await Task.create({
-        title: title.trim(),
-        description: description ? description.trim() : "",
-        status: "pending", // default value
-        deadline: deadline ? new Date(deadline) : null,
+    // Valid values for type
+    const validTypes = ["work", "personal"];
+
+    // Validate type values before adding in the taskCreatePayload
+    if (!type || !validTypes.includes(type)) {
+        res.status(400);
+        throw new Error('Invalid type value. Valid values are "work" or "personal".');
+    }
+
+    const taskCreatePayload = {
+        taskTitle: title.trim(),
         type: type,
-        user: req.user.id // reference id of the user who created the task
-    });
+        user_id: req.user.id
+    };
+
+    if (description && description.trim()) {
+        taskCreatePayload.taskDescription = description.trim();
+    }
+    if (deadline) {
+        taskCreatePayload.taskDeadline = new Date(deadline);
+    }
+
+    const task = await Task.create(taskCreatePayload);
 
     if (task) {
         res.status(201).json(task); // return the created task
@@ -134,11 +155,11 @@ const updateTask = asyncHandler(async (req, res) => {
 
     const updatedFields = {};
     // Check and validate each field before adding it to the updatedFields object
-    if (title) updatedFields.title = title.trim();
-    if (description) updatedFields.description = description.trim();
-    if (status) updatedFields.status = status;
+    if (title) updatedFields.taskTitle = title.trim();
+    if (description) updatedFields.taskDescription = description.trim();
+    if (status) updatedFields.taskStatus = status;
     if (type) updatedFields.type = type;
-    if (deadline) updatedFields.deadline = new Date(deadline);
+    if (deadline) updatedFields.taskDeadline = new Date(deadline);
 
     // Update the task with the new fields
     const updatedTask = await Task.findByIdAndUpdate(
