@@ -36,7 +36,7 @@ const tasksSchema = new mongoose.Schema({
     type: {
         type: String,
         enum: ["work", "personal"],
-        default: "personal"
+        required: [true, "Type is required"]
     }
     // Why not just add the timestamps here?
     // timestamps: true
