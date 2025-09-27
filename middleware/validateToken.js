@@ -19,7 +19,7 @@ export const validateToken = (req, res, next) => {
     }
 
     // Validate the token
-    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    jwt.verify(token, process.env.JWT_SECRET_KEY, (err, decoded) => {
         if (err) {
             res.status(constants.FORBIDDEN);
             throw new Error('Forbidden: Invalid token');
