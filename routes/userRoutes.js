@@ -1,6 +1,7 @@
 import express from 'express';
-import { registerUser, loginUser, currentUser, getUsers } from '../controllers/usersController.js';
+import { registerUser, loginUser, currentUser, logoutUser, getUsers } from '../controllers/usersController.js';
 import { validateToken } from '../middleware/validateToken.js';
+import { validateRegistration, validateLogin, sanitizeRequestBody } from '../middleware/inputValidation.js';
 
 const router = express.Router();
 
@@ -8,12 +9,15 @@ const router = express.Router();
 router.get('/', getUsers);
 
 // Register a new user
-router.post('/register', registerUser);
+router.post('/register', sanitizeRequestBody, validateRegistration, registerUser);
 
 // Login user
-router.post('/login', loginUser);
+router.post('/login', sanitizeRequestBody, validateLogin, loginUser);
 
 // Current user - private route
 router.get('/current', validateToken, currentUser);
+
+// Logout user - private route
+router.post('/logout', validateToken, logoutUser);
 
 export default router;
