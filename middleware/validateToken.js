@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { constants } from '../constants';
+import { constants } from '../constants.js';
 
 export const validateToken = (req, res, next) => {
     const authHeader = req.headers.authorization || req.headers.Authorization;
@@ -24,7 +24,7 @@ export const validateToken = (req, res, next) => {
             res.status(constants.FORBIDDEN);
             throw new Error('Forbidden: Invalid token');
         }
-        req.user = decoded.user; // Attach the decoded token payload to the request object
+        req.user = decoded // i only passed the user id in the payload. what will be the value of the payload?
         console.log("Decoded token payload: ", decoded);
 
         next(); // Proceed to the next middleware or route handler
