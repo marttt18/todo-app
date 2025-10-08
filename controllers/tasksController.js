@@ -1,23 +1,35 @@
-// route: /api/tasks
 import asyncHandler from 'express-async-handler';
 import Task from '../models/taskModel.js';
+import { STATUS_CODES } from '../constants.js';
 
-//@desc Get all tasks
-//@route GET /api/tasks/
+/**
+ * Get all tasks for the authenticated user with optional filters and sorting.
+ *
+ * @route GET /api/tasks
+ * @query {string} [type] - Filter tasks by type. Valid values: "work" | "personal"
+ * @query {string} [status] - Filter tasks by status. Valid values: "pending" | "in-progress" | "completed"
+ * @query {string} [sort] - Sort tasks by field. 
+ *   Use "deadline" or "createdAt" for ascending, and "-deadline" or "-createdAt" for descending.
+ *
+ * @example
+ * // Get only "work" tasks
+ * /api/tasks?type=work
+ *
+ * @example
+ * // Get only completed tasks
+ * /api/tasks?status=completed
+ *
+ * @example
+ * // Sort all tasks by latest deadline
+ * /api/tasks?sort=-deadline
+ *
+ * @example
+ * // Get all completed "work" tasks, sorted by earliest deadline
+ * /api/tasks?type=work&status=completed&sort=deadline
+ *
+ * @returns {Promise<void>}
+ */
 const getTasks = asyncHandler(async (req, res) => {
-    // To implement:
-    // 1. filter by type (work, personal)
-    // 2. filter by status (pending, in-progress, completed)
-    // 3. filter by type and status
-    // 4. filter by type and sort by deadline
-    // 5. filter by status and sort by deadline
-    // 6. filter by type, status, and sort by deadline
-    // 7. sort by deadline (ascending, descending)
-    // 8. no filter, no sort (get all tasks)
-
-    // what is the frontend pov when a button for sorting by deadline is cliked? what should be the url?
-
-    // Destructure the query parameters
     const { type, status, sort } = req.query;
 
     // Valid values for filtering and sorting
@@ -27,28 +39,26 @@ const getTasks = asyncHandler(async (req, res) => {
 
     // Validate query parameters (if provided)
     if (type && !validTypes.includes(type)) {
-        res.status(400);
+        res.status(STATUS_CODES.VALIDATION_ERROR);
         throw new Error('Invalid type value. Valid values are "work" or "personal".');
     }
 
     if (status && !validStatus.includes(status)) {
-        res.status(400);
+        res.status(STATUS_CODES.VALIDATION_ERROR);
         throw new Error('Invalid status value. Valid values are "pending", "in-progress", or "completed".');
     }
 
     if (sort && !validSortOptions.includes(sort)) {
-        res.status(400);
+        res.status(STATUS_CODES.VALIDATION_ERROR);
         throw new Error('Invalid sort value. Valid values are "deadline", "-deadline", "createdAt", or "-createdAt".');
     }
 
-    /* Instead of creating multiple if statements for each combination of filters, 
-    we can use a single query object */
+    // Build a flexible query object instead of chaining multiple if-statements.
+    // Remember: each key in the query must match an actual field name in the Task schema.
+    const query = { user_id: req.user.userId }; // Always filter by user ID
 
-    // Always filter by user ID
-    const query = { user_id: req.user.id };
-    // Add type filter if provided in the query object
+    // Add optional filters dynamically based on query parameters.
     if (type) query.type = type;
-    // Map external query param 'status' to model field 'taskStatus'
     if (status) query.taskStatus = status;
 
     // Determine the sorting criteria (map 'deadline' to model field 'taskDeadline')
@@ -62,24 +72,29 @@ const getTasks = asyncHandler(async (req, res) => {
     // Fetch tasks from the database based on the constructed query and sort criteria
     const tasks = await Task.find(query).sort(sortCriteria).exec();
 
-    // Return the tasks
-    res.status(200).json(tasks);
+    res.status(STATUS_CODES.OK).json(tasks);
 });
 
-//@desc Create a task
-//@route POST /api/tasks/
+/**
+ * Create a new task for the authenticated user.
+ *
+ * @route POST /api/tasks
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @returns {Promise<void>}
+ */
 const createTask = asyncHandler(async (req, res) => {
     const { title, description, deadline, type } = req.body;
 
     // Validate title
     if (!title || !title.trim()) {
-        res.status(400);
+        res.status(STATUS_CODES.VALIDATION_ERROR);
         throw new Error('Task title is required');
     }
 
     // Validate the length of the title
     if (title.trim().length < 3 || title.trim().length > 100) {
-        res.status(400);
+        res.status(STATUS_CODES.VALIDATION_ERROR);
         throw new Error('Task title must be between 3 and 100 characters');
     }
 
@@ -88,11 +103,11 @@ const createTask = asyncHandler(async (req, res) => {
         const parsedDeadline = Date.parse(deadline); // returns NaN if the date is invalid
 
         if (isNaN(parsedDeadline)) {
-            res.status(400);
+            res.status(STATUS_CODES.VALIDATION_ERROR);
             throw new Error('Invalid date format for deadline');
         }
         if (parsedDeadline <= Date.now()) {
-            res.status(400);
+            res.status(STATUS_CODES.VALIDATION_ERROR);
             throw new Error('Deadline must be a future date');
         }
     }
@@ -102,14 +117,14 @@ const createTask = asyncHandler(async (req, res) => {
 
     // Validate type values before adding in the taskCreatePayload
     if (!type || !validTypes.includes(type)) {
-        res.status(400);
+        res.status(STATUS_CODES.VALIDATION_ERROR);
         throw new Error('Invalid type value. Valid values are "work" or "personal".');
     }
 
     const taskCreatePayload = {
         taskTitle: title.trim(),
         type: type,
-        user_id: req.user.id
+        user_id: req.user.userId
     };
 
     if (description && description.trim()) {
@@ -121,34 +136,56 @@ const createTask = asyncHandler(async (req, res) => {
 
     const task = await Task.create(taskCreatePayload);
 
-    if (task) {
-        res.status(201).json(task); // return the created task
-    } else {
-        res.status(400);
-        throw new Error('Invalid task data');
-    }
+    res.status(STATUS_CODES.CREATED).json(task);    
 });
 
-//@desc Update a task by id
-//@route PUT /api/tasks/:id
+/**
+ * Get a task by id.
+ *
+ * @route GET /api/tasks/:id
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @returns {Promise<void>}
+ */
+const getTaskById = asyncHandler(async (req, res) => {
+    const task = await Task.findById(req.params.id);
+
+    if (!task) {
+        res.status(STATUS_CODES.NOT_FOUND);
+        throw new Error('Task not found');
+    }
+
+    // Verify if the logged-in user matches the task owner
+    if (task.user_id.toString() !== req.user.userId) {
+        res.status(STATUS_CODES.FORBIDDEN);
+        throw new Error('User not authorized to update other users task');
+    }
+
+    res.status(STATUS_CODES.OK).json(task);
+});
+
+/**
+ * Update a task by id. Only the task owner may update.
+ *
+ * @route PUT /api/tasks/:id
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @returns {Promise<void>}
+ */
 const updateTask = asyncHandler(async (req, res) => {
     // Verify if a task with the given id exists
     const task = await Task.findById(req.params.id);
 
     if (!task) {
-        res.status(404);
+        res.status(STATUS_CODES.NOT_FOUND);
         throw new Error('Task not found');
     }
 
     // Verify if the logged-in user matches the task owner
-    if (task.user_id.toString() !== req.user.id) {
-        res.status(403);
+    if (task.user_id.toString() !== req.user.userId) {
+        res.status(STATUS_CODES.FORBIDDEN);
         throw new Error('User not authorized to update other users task');
     }
-    // Q: what is the difference betwen != and !== ?
-    // Q: In what scenario does a another user get to update a task that is not theirs? A: If the user is an admin, they might have the ability to update any task. But in this case, we are not implementing roles, so only the owner of the task can update it.
-    // Q: I mean how can a user get to update a task that is not theirs? A: If there is a bug in the code that allows it. But we are checking for that here, so it should be fine.
-    // Q: How can a user get to request to update a task that is not theirs in the first place. If the task displayed to them i
 
     // Destruture the fields from the request body
     const { title, description, status, type, deadline } = req.body;
@@ -165,71 +202,57 @@ const updateTask = asyncHandler(async (req, res) => {
     const updatedTask = await Task.findByIdAndUpdate(
         req.params.id,
         { $set: updatedFields }, // $set operator to update only the specified fields
-        { new: true, runValidators: true }); // return the updated document(because updating a document returns the old document before the update) and run validators
+        { new: true, runValidators: true }); // return the updated document(because updating a document returns the old document before the update)
 
-    /* If there had an issue with the update, return a server error, it will be automatically handled by express-async-handler
-        If the updated document is not returned, then it is a server error
-    if (!updatedTask) {
-        res.status(500);
-        throw new Error('Failed to update the task');
-    } // this is useless because we already checked if the task exists above -- we can remove this */
-
-    res.status(200).json({ message: `Update Task ${req.params.id}`, updatedTask: updatedTask });
+    res.status(STATUS_CODES.OK).json({ message: `Update Task ${req.params.id}`, updatedTask: updatedTask });
 });
 
-//@desc Delete all tasks
-//@route DELETE /api/tasks/
+/**
+ * Delete all tasks belonging to the authenticated user.
+ *
+ * @route DELETE /api/tasks
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @returns {Promise<void>}
+ */
 const deleteAllTasks = asyncHandler(async (req, res) => {
-    const result = await Task.deleteMany({ user_id: req.user.id }); // what does this return? An object with the number of deleted documents. So we can return that number to the user
+    const result = await Task.deleteMany({ user_id: req.user.userId }); // what does this return? An object with the number of deleted documents. So we can return that number to the user
     // how to delete the task and assign the list of tasks to a variable? You can use the findByIdAndDelete method. But in this case we are deleting all tasks, so we use deleteMany.
 
     // Idea: remove all tasks that are completed, 
-    if (result.deletedCount === 0) { // what does result variable contain? give me an example
-        res.status(404).json({ message: 'No tasks to delete' });
-    } else {
-        res.status(200).json({ message: `Deleted ${result.deletedCount} tasks` });
+    if (result.deletedCount === 0) { 
+        return res.status(STATUS_CODES.NOT_FOUND).json({ message: 'No tasks to delete' });
     }
+
+    res.status(STATUS_CODES.OK).json({ message: `Deleted ${result.deletedCount} tasks` });
 });
 
-//@desc Delete task by id
-//@route DELETE /api/tasks/:id
+/**
+ * Delete a task by id. Only the task owner may delete.
+ *
+ * @route DELETE /api/tasks/:id
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @returns {Promise<void>}
+ */
 const deleteTask = asyncHandler(async (req, res) => {
-    /* // Validate if a task with the given id exists
     const task = await Task.findById(req.params.id);
 
     if (!task) {
-        res.status(404);
-        throw new Error('Task not found');
-    }
-
-    //const taskDeleted = await task.remove(); // remove the task -- this is deprecated
-    await task.deleteOne();  */
-
-    // can we just write it like this?
-    // const task = await Task.findByIdAndDelete(req.params.id);
-    // if (!task) throw new Error("Task not found");
-
-    // Yes, we can. But in this case we want to first check if the task exists before deleting it.
-    // But we can just state that the task does not exist if the task is null after the deletion attempt.
-    const task = await Task.findById(req.params.id);
-
-    if (!task) {
-        res.status(404);
+        res.status(STATUS_CODES.NOT_FOUND);
         throw new Error("Task not found");
     }
 
     // Verify if the logged-in user matches the task owner
-    if (task.user_id.toString() !== req.user.id) {
-        res.status(403);
+    if (task.user_id.toString() !== req.user.userId) {
+        res.status(STATUS_CODES.FORBIDDEN);
         throw new Error('User not authorized to update other users task');
     }
 
-    // Delete the task
     await Task.findByIdAndDelete(req.params.id);
 
-    // Return the deleted task
-    res.status(200).json({ deletedTask: task });
+    res.status(STATUS_CODES.OK).json({ deletedTask: task });
 });
 
-export { getTasks, createTask, updateTask, deleteAllTasks, deleteTask };
+export { getTasks, createTask, getTaskById, updateTask, deleteAllTasks, deleteTask };
 

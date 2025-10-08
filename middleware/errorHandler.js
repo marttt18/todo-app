@@ -1,23 +1,23 @@
-import { constants } from '../constants.js';
+import { STATUS_CODES } from '../constants.js';
 
 const errorHandler = (err, req, res, next) => {
-    const statusCode = res.statusCode == 200? 500: res.statusCode;
+    const statusCode = res.statusCode == STATUS_CODES.OK ? STATUS_CODES.INTERNAL_SERVER_ERROR : res.statusCode;
 
     let title;
     switch (statusCode) {
-        case constants.VALIDATION_ERROR:
+        case STATUS_CODES.VALIDATION_ERROR:
             title = "Validation Error";
             break;
-        case constants.UNAUTHORIZED:
+        case STATUS_CODES.UNAUTHORIZED:
             title = "Unauthorized";
             break;
-        case constants.FORBIDDEN:
+        case STATUS_CODES.FORBIDDEN:
             title = "Forbidden";
             break;
-        case constants.NOT_FOUND:
+        case STATUS_CODES.NOT_FOUND:
             title = "Not Found";
             break;
-        case constants.SERVER_ERROR:
+        case STATUS_CODES.INTERNAL_SERVER_ERROR:
             title = "Server Error";
             break;
         default:
