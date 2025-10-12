@@ -271,7 +271,7 @@ const updateTask = asyncHandler(async (req, res) => {
  * @returns {Promise<void>}
  */
 const deleteAllTasks = asyncHandler(async (req, res) => {
-    const tasks = await Task.find({ user_id: req.userId });
+    const tasks = await Task.find({ user_id: req.userId }).select("_id");
 
     if (tasks.length === 0) {
         return res.status(STATUS_CODES.OK).json({
