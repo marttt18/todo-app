@@ -344,4 +344,3 @@ const deleteTask = asyncHandler(async (req, res) => {
 });
 
 export { getTasks, createTask, getTaskById, updateTask, deleteAllTasks, deleteTask };
-
