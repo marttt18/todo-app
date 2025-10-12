@@ -3,30 +3,49 @@ import Task from '../models/taskModel.js';
 import { STATUS_CODES } from '../constants.js';
 
 /**
- * @desc Get all tasks for the authenticated user with optional filters and sorting.
+ * @desc Retrieve all tasks for the authenticated user, with optional filtering and sorting.
+ * 
+ * By default, this endpoint returns only *active tasks* — that is, tasks whose status is not "completed".
+ * You can include completed tasks by specifying the `status=completed` query parameter.
+ * 
  * @route GET /api/tasks
- * @query {string} [type] - Filter tasks by type. Valid values: "work" | "personal"
- * @query {string} [status] - Filter tasks by status. Valid values: "pending" | "in-progress" | "completed"
- * @query {string} [sort] - Sort tasks by field. 
- *   Use "deadline" or "createdAt" for ascending, and "-deadline" or "-createdAt" for descending.
+ * 
+ * @query {string} [type] - Filter tasks by type.
+ *   Valid values: "work" | "personal"
+ * 
+ * @query {string} [status] - Filter tasks by status.
+ *   Valid values: "pending" | "in-progress" | "completed"
+ *   If omitted, completed tasks are excluded from the results.
+ * 
+ * @query {string} [sort] - Sort tasks by a field.
+ *   Valid values:
+ *     • "deadline" — Sort by deadline (earliest first)
+ *     • "-deadline" — Sort by deadline (latest first)
+ *     • "createdAt" — Sort by creation date (oldest first)
+ *     • "-createdAt" — Sort by creation date (newest first)
+ *   Default: ascending by "createdAt"
  * 
  * @example
- * // Get only "work" tasks
+ * // Get all active "work" tasks (default: excludes completed)
  * /api/tasks?type=work
  *
  * @example
- * // Get only completed tasks
+ * // Get all completed tasks only
  * /api/tasks?status=completed
  *
  * @example
- * // Sort all tasks by latest deadline
+ * // Get all tasks sorted by latest deadline
  * /api/tasks?sort=-deadline
  *
  * @example
  * // Get all completed "work" tasks, sorted by earliest deadline
  * /api/tasks?type=work&status=completed&sort=deadline
  *
- * @returns {Promise<void>}
+ * @returns {Promise<void>} 200 - An array of task objects matching the filters.
+ * 
+ * @note
+ * If no query parameters are provided, the response includes only the user's
+ * active (non-completed) tasks, sorted by creation date in ascending order.
  */
 const getTasks = asyncHandler(async (req, res) => {
     const { type, status, sort } = req.query;
@@ -76,7 +95,11 @@ const getTasks = asyncHandler(async (req, res) => {
     // Fetch tasks from the database based on the constructed query and sort criteria
     const tasks = await Task.find(query).sort(sortCriteria).exec();
 
-    res.status(STATUS_CODES.OK).json(tasks);
+    res.status(STATUS_CODES.OK).json({
+        success: true,
+        message: "Tasks retrieved successfully",
+        data: tasks
+    });
 });
 
 /**
@@ -99,33 +122,30 @@ const createTask = asyncHandler(async (req, res) => {
 
     if (!title || !title.trim()) {
         res.status(STATUS_CODES.VALIDATION_ERROR);
-        throw new Error('Task title is required');
+        throw new Error("Task title is required");
     }
 
-    if (title.trim().length < 3 || title.trim().length > 100) {
+    if (title.trim().length < 2 || title.trim().length > 25) {
         res.status(STATUS_CODES.VALIDATION_ERROR);
-        throw new Error('Task title must be between 3 and 100 characters');
+        throw new Error('Task title must be between 2 and 25 characters');
     }
 
-    // Validate deadline (if provided)    
+    // Validate deadline if provided
     if (deadline) {
-        const parsedDeadline = Date.parse(deadline); // returns NaN if the date format is invalid
+        const parsedDeadline = Date.parse(deadline);
 
-        console.log(parsedDeadline);
-
-        if (parsedDeadline <= Date.now()) { 
-            res.status(STATUS_CODES.VALIDATION_ERROR);
-            throw new Error('Deadline must be a future date');
-        }
         if (isNaN(parsedDeadline)) {
             res.status(STATUS_CODES.VALIDATION_ERROR);
-            throw new Error('Invalid date format for deadline');
+            throw new Error("Invalid date format for deadline");
+        }
+
+        if (parsedDeadline <= Date.now()) {
+            res.status(STATUS_CODES.VALIDATION_ERROR);
+            throw new Error("Deadline must be a future date");
         }
     }
 
     const validTypes = ["work", "personal"];
-
-    // Validate type values before adding in the taskCreatePayload
     if (!type || !validTypes.includes(type)) {
         res.status(STATUS_CODES.VALIDATION_ERROR);
         throw new Error('Invalid type value. Valid values are "work" or "personal".');
@@ -133,25 +153,33 @@ const createTask = asyncHandler(async (req, res) => {
 
     const taskCreatePayload = {
         taskTitle: title.trim(),
-        type: type,
-        user_id: req.user.userId
+        type,
+        user_id: req.user.userId,
     };
 
-    if (description && description.trim()) {
+    if (description?.trim()) {
+        if (description.trim().length > 100) {
+            res.status(STATUS_CODES.VALIDATION_ERROR);
+            throw new Error('Task description must be less than 100 characters');
+        }
         taskCreatePayload.taskDescription = description.trim();
     }
+
     if (deadline) {
         taskCreatePayload.taskDeadline = new Date(deadline);
     }
 
     const task = await Task.create(taskCreatePayload);
 
-    res.status(STATUS_CODES.CREATED).json(task);    
+    res.status(STATUS_CODES.CREATED).json({
+        success: true,
+        message: "Task created successfully",
+        data: task
+    });
 });
 
 /**
- * Get a task by id.
- *
+ * @desc Get a specific task by ID for the authenticated user.
  * @route GET /api/tasks/:id
  * @param {import('express').Request} req
  * @param {import('express').Response} res
@@ -165,18 +193,20 @@ const getTaskById = asyncHandler(async (req, res) => {
         throw new Error('Task not found');
     }
 
-    // Verify if the logged-in user matches the task owner
     if (task.user_id.toString() !== req.user.userId) {
         res.status(STATUS_CODES.FORBIDDEN);
         throw new Error('User not authorized to update other users task');
     }
 
-    res.status(STATUS_CODES.OK).json(task);
+    res.status(STATUS_CODES.OK).json({
+        success: true,
+        message: "Task retrieved successfully",
+        data: task
+    });
 });
 
 /**
- * Update a task by id. Only the task owner may update.
- *
+ * @desc Update a task by ID. Only the task owner may update.
  * @route PUT /api/tasks/:id
  * @param {import('express').Request} req
  * @param {import('express').Response} res
@@ -201,19 +231,48 @@ const updateTask = asyncHandler(async (req, res) => {
 
     const updatedFields = {};
     // Check and validate each field before adding it to the updatedFields object
-    if (title) updatedFields.taskTitle = title.trim();
-    if (description) updatedFields.taskDescription = description.trim();
+    if (title) {
+        if (title.trim().length < 2 || title.trim().length > 25) {
+            res.status(STATUS_CODES.VALIDATION_ERROR);
+            throw new Error('Task title must be between 2 and 25 characters');
+        }
+        updatedFields.taskTitle = title.trim();
+    }
+    if (description) {
+        if (description.trim().length > 100) {
+            res.status(STATUS_CODES.VALIDATION_ERROR);
+            throw new Error('Task description must be less than 100 characters');
+        }
+        updatedFields.taskDescription = description.trim();
+    }
     if (status) updatedFields.taskStatus = status;
     if (type) updatedFields.type = type;
     if (deadline) updatedFields.taskDeadline = new Date(deadline);
+
+    // Define projection for updated task response
+    const projection = {
+        _id: 1,
+        user_id: 1,
+        taskTitle: 1,
+        taskDescription: 1,
+        taskStatus: 1,
+        taskDeadline: 1,
+        type: 1,
+        createdAt: 1,
+        updatedAt: 1
+    };
 
     // Update the task with the new fields
     const updatedTask = await Task.findByIdAndUpdate(
         req.params.id,
         { $set: updatedFields }, // $set operator to update only the specified fields
-        { new: true, runValidators: true }); // return the updated document(because updating a document returns the old document before the update)
+        { new: true, runValidators: true, select: projection }); // return the updated document with projection
 
-    res.status(STATUS_CODES.OK).json({ message: `Update Task ${req.params.id}`, updatedTask: updatedTask });
+    res.status(STATUS_CODES.OK).json({
+        success: true,
+        message: "Task updated successfully",
+        data: updatedTask
+    });
 });
 
 /**
@@ -225,22 +284,23 @@ const updateTask = asyncHandler(async (req, res) => {
  * @returns {Promise<void>}
  */
 const deleteAllTasks = asyncHandler(async (req, res) => {
-    const tasks = await Task.find({ user_id: req.userId}); 
+    const tasks = await Task.find({ user_id: req.userId });
 
     if (tasks.length === 0) {
         return res.status(STATUS_CODES.OK).json({
+            success: true,
             message: "No tasks to delete",
-            tasks: tasks
+            data: tasks
         });
     }
 
     const { status } = req.query;
 
     const validStatus = ["pending", "in-progress", "completed"];
-    
+
     if (status && !validStatus.includes(status)) {
         return res.status(STATUS_CODES.VALIDATION_ERROR).
-        json({ message: `Invalid status. Valid statuses are: ${ validStatus.join(", ")}` })
+            json({ message: `Invalid status. Valid statuses are: ${validStatus.join(", ")}` })
     }
 
     const filter = { user_id: req.userId };
@@ -249,36 +309,38 @@ const deleteAllTasks = asyncHandler(async (req, res) => {
     const deletedTasks = await Task.deleteMany({ user_id: req.userId, status: status.trim() });
 
     res.status(STATUS_CODES.OK).json({
+        success: true,
         message: `Deleted ${deletedTasks.deletedCount} task(s)`,
         deletedCount: deletedTasks.deletedCount
     });
 });
 
 /**
- * Delete a task by id. Only the task owner may delete.
- *
+ * @desc Delete a task by ID. Only the task owner may delete.
  * @route DELETE /api/tasks/:id
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  * @returns {Promise<void>}
  */
 const deleteTask = asyncHandler(async (req, res) => {
-    const task = await Task.findById(req.params.id);
+    const task = await Task.findById(req.params.id).select("user_id");
 
     if (!task) {
         res.status(STATUS_CODES.NOT_FOUND);
         throw new Error("Task not found");
     }
 
-    // Verify if the logged-in user matches the task owner
     if (task.user_id.toString() !== req.user.userId) {
         res.status(STATUS_CODES.FORBIDDEN);
-        throw new Error('User not authorized to update other users task');
+        throw new Error("User not authorized to delete this task");
     }
 
-    await Task.findByIdAndDelete(req.params.id);
+    const deletedTask = await Task.deleteOne({ _id: req.params.id });
 
-    res.status(STATUS_CODES.OK).json({ deletedTask: task });
+    res.status(STATUS_CODES.OK).json({
+        success: true,
+        message: "Task deleted successfully"
+    });
 });
 
 export { getTasks, createTask, getTaskById, updateTask, deleteAllTasks, deleteTask };
