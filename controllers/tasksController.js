@@ -249,24 +249,11 @@ const updateTask = asyncHandler(async (req, res) => {
     if (type) updatedFields.type = type;
     if (deadline) updatedFields.taskDeadline = new Date(deadline);
 
-    // Define projection for updated task response
-    const projection = {
-        _id: 1,
-        user_id: 1,
-        taskTitle: 1,
-        taskDescription: 1,
-        taskStatus: 1,
-        taskDeadline: 1,
-        type: 1,
-        createdAt: 1,
-        updatedAt: 1
-    };
-
     // Update the task with the new fields
     const updatedTask = await Task.findByIdAndUpdate(
         req.params.id,
         { $set: updatedFields }, // $set operator to update only the specified fields
-        { new: true, runValidators: true, select: projection }); // return the updated document with projection
+        { new: true, runValidators: true }); // return the updated document with projection
 
     res.status(STATUS_CODES.OK).json({
         success: true,
