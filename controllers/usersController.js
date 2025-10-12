@@ -5,8 +5,7 @@ import generateToken from "../utils/generateToken.js";
 import { STATUS_CODES } from "../constants.js";
 
 /**
- * Get all users. Intended for testing/admin use only.
- *
+ * @desc Get all users. Intended for testing/admin use only.
  * @route GET /api/users
  * @returns {Promise<void>}
  */
@@ -15,7 +14,7 @@ const getUsers = asyncHandler(async (req, res) => {
 });
 
 /**
- * Register a new user and return an access token for auto login. 
+ * @desc Register a new user and return an access token for auto login. 
  * @route POST /api/users/register
  * @param {import('express').Request} req
  * @param {import('express').Response} res
@@ -31,39 +30,42 @@ const getUsers = asyncHandler(async (req, res) => {
 const registerUser = asyncHandler(async (req, res) => {
     const { username, email, password } = req.body;
 
-    // Check if user exists
-    const userExists = await User.findOne({ email });
+    // Check if user exists (only return the _id to optimize)
+    const userExists = await User.findOne({ email }).select("_id");
     if (userExists) {
         res.status(STATUS_CODES.VALIDATION_ERROR);
         throw new Error("User already exists");
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10); // 10 is the salt rounds
+    const hashedPassword = await bcrypt.hash(password, 10); // 10 = salt rounds
 
-    // Create user 
+    // Create user
     const user = await User.create({
         username,
         email,
         password: hashedPassword
     });
 
+    // Generate access token
     const accessToken = generateToken(user._id);
 
     res.status(STATUS_CODES.CREATED).json({
-        title: "User Created Successfully!",
-        _id: user._id,
-        username: user.username,
-        email: user.email,
+        success: true,
+        message: "User created successfully!",
+        user: {
+            _id: user._id,
+            username: user.username,
+            email: user.email
+        },
         accessToken
     });
 });
 
 /**
- * Login a user and return an access token.
- *
+ * @desc Login a user and return an access token.
  * @route POST /api/users/login
- * @param {import('express').Request} req
+ * @param {import('express').Request} req  
  * @param {import('express').Response} res
  * @returns {Promise<void>}
  * @example
@@ -76,8 +78,8 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
-    // Find user 
-    const user = await User.findOne({ email });
+    // Find user with minimal projection for login (need password for comparison)
+    const user = await User.findOne({ email }, { _id: 1, username: 1, email: 1, password: 1 });
 
     // Check if the user exists
     if (!user) {
@@ -91,12 +93,15 @@ const loginUser = asyncHandler(async (req, res) => {
         const accessToken = generateToken(user._id);
 
         res.status(STATUS_CODES.OK).json({
-        title: "Login Successfully!",
-        _id: user._id,
-        username: user.username,
-        email: user.email,
-        accessToken
-    });
+            success: true,
+            message: "Login successful!",
+            user: {
+                _id: user._id,
+                username: user.username,
+                email: user.email
+            },
+            accessToken
+        });
     } else {
         res.status(STATUS_CODES.UNAUTHORIZED);
         throw new Error("Invalid email or password");
@@ -104,8 +109,7 @@ const loginUser = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get the currently authenticated user's profile.
- *
+ * @desc Get the currently authenticated user's profile.
  * @route GET /api/users/current
  * @param {import('express').Request} req
  * @param {import('express').Response} res
@@ -126,15 +130,10 @@ const currentUser = asyncHandler(async (req, res) => {
         throw new Error("User not found");
     }
 
-    res.status(STATUS_CODES.OK).json({
+    res.status(200).json({
         success: true,
-        user: {
-            id: user._id,
-            username: user.username,
-            email: user.email,
-            createdAt: user.createdAt,
-            updatedAt: user.updatedAt
-        }
+        message: "Authenticated user retrieved successfully",
+        data: user
     });
 });
 
