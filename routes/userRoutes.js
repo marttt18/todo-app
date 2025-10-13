@@ -9,13 +9,16 @@ const router = express.Router();
 // Get all users (for testing purposes only, should be removed in production)
 router.get('/', getUsers);
 
-// Register a new user
+// @route /api/users/register
+// @access public
 router.post('/register', sanitizeRequestBody, validateRegistration, registerUser);
 
-// Login user
+// @route /api/users/login
+// @access public
 router.post('/login', sanitizeRequestBody, validateLogin, loginUser);
 
-// Current user - private route
+// @route /api/users/current
+// @access private
 router.get('/current', validateToken, currentUser);
 
 export default router;

@@ -186,16 +186,14 @@ const createTask = asyncHandler(async (req, res) => {
  * @returns {Promise<void>}
  */
 const getTaskById = asyncHandler(async (req, res) => {
-    const task = await Task.findById(req.params.id);
+    const task = await Task.findOne({
+        _id: req.params.id,
+        user_id: req.user.userId // filter by owner
+    });
 
     if (!task) {
         res.status(STATUS_CODES.NOT_FOUND);
         throw new Error('Task not found');
-    }
-
-    if (task.user_id.toString() !== req.user.userId) {
-        res.status(STATUS_CODES.FORBIDDEN);
-        throw new Error('User not authorized to update other users task');
     }
 
     res.status(STATUS_CODES.OK).json({
@@ -253,7 +251,7 @@ const updateTask = asyncHandler(async (req, res) => {
     const updatedTask = await Task.findByIdAndUpdate(
         req.params.id,
         { $set: updatedFields }, // $set operator to update only the specified fields
-        { new: true, runValidators: true }); // return the updated document with projection
+        { new: true, runValidators: true }); // return the updated document
 
     res.status(STATUS_CODES.OK).json({
         success: true,
@@ -330,4 +328,112 @@ const deleteTask = asyncHandler(async (req, res) => {
     });
 });
 
-export { getTasks, createTask, getTaskById, updateTask, deleteAllTasks, deleteTask };
+/**
+ * @desc Get dashboard summary and progress chart for the authenticated user.
+ *
+ * Provides high-level counts and collections to power the dashboard UI, including:
+ * - active vs completed vs overdue task counts
+ * - tasks overdue (array)
+ * - tasks due today (array)
+ * - a progress chart for today broken down by status
+ *
+ * You can scope results by task type using the path parameter.
+ *
+ * @route GET /api/tasks/dashboard/:type
+ *   Where `:type` is one of "work" | "personal" | "all"
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @returns {Promise<void>} 200 - Dashboard data including `summary` and `progressChart`.
+ *
+ * @example
+ * // All task types
+ * // GET /api/tasks/dashboard/all
+ *
+ * @example
+ * // Only work tasks
+ * // GET /api/tasks/dashboard/work
+ *
+ * @example
+ * // Only personal tasks
+ * // GET /api/tasks/dashboard/personal
+ *
+ * @notes
+ * - Dates are evaluated in server time. "Today" is calculated using midnight local server time.
+ * - Overdue tasks are tasks with a past deadline that are not completed.
+ */
+const dashboard = asyncHandler(async (req, res) => {
+    const type  = req.params.type;
+    if (type) type = type.toLowerCase();
+
+    const validTypes = ["all", "work", "personal"];
+    if (type && !validTypes.includes(type)) {
+        res.status(STATUS_CODES.VALIDATION_ERROR);
+        throw new Error("Invalid type parameter provided");
+    }
+
+    // Build query
+    const query= { user_id: req.user.userId };
+    if (type && type !== "all") query.type = type;
+
+    const tasks = await Task.find(query);
+
+    // Initialize counters and arrays
+    let activeTasksCount = 0;
+    let completedTasksCount = 0;
+    let overdueTasksCount = 0;
+    let tasksOverdue = [];
+    let todayTasks = [];
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // midnight today
+
+    for (let task of tasks) {
+        const taskDeadline = task.taskDeadline ? new Date(task.taskDeadline) : null;
+
+        // Count active and completed tasks
+        if (task.taskStatus === "pending" || task.taskStatus === "in-progress") {
+            activeTasksCount++;
+        } else if (task.taskStatus === "completed") {
+            completedTasksCount++;
+        }
+
+        // Overdue tasks (past deadline and not completed)
+        if (taskDeadline && taskDeadline < today && task.taskStatus !== "completed") {
+            overdueTasksCount++;
+            tasksOverdue.push(task);
+        }
+
+        // Tasks for today
+        if (
+            taskDeadline &&
+            taskDeadline.getFullYear() === today.getFullYear() &&
+            taskDeadline.getMonth() === today.getMonth() &&
+            taskDeadline.getDate() === today.getDate()
+        ) {
+            todayTasks.push(task);
+        }
+    }
+
+    // Build progress chart for today
+    const progressChart = {
+        pending: todayTasks.filter(t => t.taskStatus === "pending").length,
+        inProgress: todayTasks.filter(t => t.taskStatus === "in-progress").length,
+        completed: todayTasks.filter(t => t.taskStatus === "completed").length
+    };
+
+    res.status(STATUS_CODES.OK).json({
+        success: true,
+        taskType: type,
+        summary: {
+            activeTasksCount,
+            completedTasksCount,
+            overdueTasksCount,
+            tasksOverdue,
+            todayTasks
+        },
+        progressChart
+    });
+});
+
+export { getTasks, createTask, getTaskById, updateTask, deleteAllTasks, deleteTask, dashboard };

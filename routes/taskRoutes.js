@@ -5,7 +5,8 @@ import {
     getTaskById, 
     updateTask, 
     deleteAllTasks, 
-    deleteTask 
+    deleteTask,
+    dashboard
 } from '../controllers/tasksController.js';
 import { validateToken } from '../middleware/validateToken.js';
 
@@ -24,5 +25,9 @@ router.route('/:id')
     .get(validateToken, getTaskById)    // Get a task by id
     .put(validateToken, updateTask)     // Update a task by id
     .delete(validateToken, deleteTask); // Delete a task by id
+
+//@route /api/tasks/dashboard
+//@access private
+router.route('/dashboard/:type').get(validateToken, dashboard);
 
 export default router;
