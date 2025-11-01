@@ -4,6 +4,7 @@ import {
     createTask,
     getTaskById, 
     updateTask, 
+    partialUpdateTask,
     deleteAllTasks, 
     deleteTask,
     dashboard
@@ -22,9 +23,10 @@ router.route('/')
 //@route /api/tasks/:id
 //@access private
 router.route('/:id')
-    .get(validateToken, getTaskById)    // Get a task by id
-    .put(validateToken, updateTask)     // Update a task by id
-    .delete(validateToken, deleteTask); // Delete a task by id
+    .get(validateToken, getTaskById)        // Get a task by id
+    .put(validateToken, updateTask)         // Update a task by id
+    .patch(validateToken, partialUpdateTask) // Partially update a task by id
+    .delete(validateToken, deleteTask);     // Delete a task by id
 
 //@route /api/tasks/dashboard
 //@access private
