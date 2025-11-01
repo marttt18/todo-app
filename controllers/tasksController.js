@@ -2,6 +2,78 @@ import asyncHandler from 'express-async-handler';
 import Task from '../models/taskModel.js';
 import { STATUS_CODES } from '../constants.js';
 
+// ------------------- //
+// Helper Functions 
+// ------------------- // 
+
+// Shared validation constants
+const VALID_STATUS = ["pending", "in-progress", "completed"];
+const VALID_TYPE = ["work", "personal"];
+
+/** 
+ * @desc Helper to validate and build updated fields 
+ */
+const validateAndBuildFields = ({ title, description, status, type, deadline }) => {
+    const updatedFields = {};
+
+    if (title) {
+        const trimmed = title.trim();
+        if (trimmed.length < 2 || trimmed.length > 25) {
+            throw new Error("Task title must be between 2 and 25 characters");
+        }
+        updatedFields.taskTitle = trimmed;
+    }
+
+    if (description) {
+        const trimmed = description.trim();
+        if (trimmed.length > 100) {
+            throw new Error("Task description must be less than 100 characters");
+        }
+        updatedFields.taskDescription = trimmed;
+    }
+
+    if (deadline) {
+        const parsedDeadline = Date.parse(deadline);
+        if (isNaN(parsedDeadline)) throw new Error("Invalid date format for deadline");
+        if (parsedDeadline <= Date.now()) throw new Error("Deadline must be a future date");
+        updatedFields.taskDeadline = new Date(deadline);
+    }
+
+    if (status) {
+        if (!VALID_STATUS.includes(status)) throw new Error("Invalid status value");
+        updatedFields.taskStatus = status;
+    }
+
+    if (type) {
+        if (!VALID_TYPE.includes(type)) throw new Error("Invalid type value");
+        updatedFields.type = type;
+    }
+
+    return updatedFields;
+};
+
+/** 
+ * @desc Helper to verify task ownership 
+ */
+const verifyTaskOwnership = async (taskId, userId, res) => {
+    const task = await Task.findById(taskId);
+    if (!task) {
+        res.status(STATUS_CODES.NOT_FOUND);
+        throw new Error("Task not found");
+    }
+
+    if (task.user_id.toString() !== userId) {
+        res.status(STATUS_CODES.FORBIDDEN);
+        throw new Error("User not authorized to update this task");
+    }
+
+    return task;
+};
+
+// ------------------- //
+// Controller Functions 
+// ------------------- // 
+
 /**
  * @desc Retrieve all tasks for the authenticated user, with optional filtering and sorting.
  * 
@@ -40,8 +112,6 @@ import { STATUS_CODES } from '../constants.js';
  * @example
  * // Get all completed "work" tasks, sorted by earliest deadline
  * /api/tasks?type=work&status=completed&sort=deadline
- *
- * @returns {Promise<void>} 200 - An array of task objects matching the filters.
  * 
  * @note
  * If no query parameters are provided, the response includes only the user's
@@ -50,18 +120,16 @@ import { STATUS_CODES } from '../constants.js';
 const getTasks = asyncHandler(async (req, res) => {
     const { type, status, sort } = req.query;
 
-    // Valid values for filtering and sorting
-    const validTypes = ["work", "personal"];
-    const validStatus = ["pending", "in-progress", "completed"];
-    const validSortOptions = ["deadline", "-deadline", "createdAt", "-createdAt"]
+    // Valid values for sorting
+    const validSortOptions = ["deadline", "-deadline", "createdAt", "-createdAt"];
 
     // Validate query parameters (if provided)
-    if (type && !validTypes.includes(type)) {
+    if (type && !VALID_TYPE.includes(type)) {
         res.status(STATUS_CODES.VALIDATION_ERROR);
         throw new Error('Invalid type value. Valid values are "work" or "personal".');
     }
 
-    if (status && !validStatus.includes(status)) {
+    if (status && !VALID_STATUS.includes(status)) {
         res.status(STATUS_CODES.VALIDATION_ERROR);
         throw new Error('Invalid status value. Valid values are "pending", "in-progress", or "completed".');
     }
@@ -105,9 +173,6 @@ const getTasks = asyncHandler(async (req, res) => {
 /**
  * @desc Create a new task for the authenticated user.
  * @route POST /api/tasks
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @returns {Promise<void>}
  * @example
  * // Request body: (Note: description and deadline are not mandatory && status is set by default in the schema)
  * // {
@@ -120,54 +185,26 @@ const getTasks = asyncHandler(async (req, res) => {
 const createTask = asyncHandler(async (req, res) => {
     const { title, description, deadline, type } = req.body;
 
+    // Validate required title
     if (!title || !title.trim()) {
         res.status(STATUS_CODES.VALIDATION_ERROR);
         throw new Error("Task title is required");
     }
 
-    if (title.trim().length < 2 || title.trim().length > 25) {
-        res.status(STATUS_CODES.VALIDATION_ERROR);
-        throw new Error('Task title must be between 2 and 25 characters');
-    }
-
-    // Validate deadline if provided
-    if (deadline) {
-        const parsedDeadline = Date.parse(deadline);
-
-        if (isNaN(parsedDeadline)) {
-            res.status(STATUS_CODES.VALIDATION_ERROR);
-            throw new Error("Invalid date format for deadline");
-        }
-
-        if (parsedDeadline <= Date.now()) {
-            res.status(STATUS_CODES.VALIDATION_ERROR);
-            throw new Error("Deadline must be a future date");
-        }
-    }
-
-    const validTypes = ["work", "personal"];
-    if (!type || !validTypes.includes(type)) {
+    // Validate required type
+    if (!type || !VALID_TYPE.includes(type)) {
         res.status(STATUS_CODES.VALIDATION_ERROR);
         throw new Error('Invalid type value. Valid values are "work" or "personal".');
     }
 
+    // Use validateAndBuildFields to handle validation and building of fields
+    // This handles title, description, deadline validation
+    const validatedFields = validateAndBuildFields({ title, description, deadline, type });
+
     const taskCreatePayload = {
-        taskTitle: title.trim(),
-        type,
+        ...validatedFields,
         user_id: req.user.userId,
     };
-
-    if (description?.trim()) {
-        if (description.trim().length > 100) {
-            res.status(STATUS_CODES.VALIDATION_ERROR);
-            throw new Error('Task description must be less than 100 characters');
-        }
-        taskCreatePayload.taskDescription = description.trim();
-    }
-
-    if (deadline) {
-        taskCreatePayload.taskDeadline = new Date(deadline);
-    }
 
     const task = await Task.create(taskCreatePayload);
 
@@ -181,9 +218,6 @@ const createTask = asyncHandler(async (req, res) => {
 /**
  * @desc Get a specific task by ID for the authenticated user.
  * @route GET /api/tasks/:id
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @returns {Promise<void>}
  */
 const getTaskById = asyncHandler(async (req, res) => {
     const task = await Task.findOne({
@@ -203,60 +237,47 @@ const getTaskById = asyncHandler(async (req, res) => {
     });
 });
 
-/**
- * @desc Update a task by ID. Only the task owner may update.
- * @route PUT /api/tasks/:id
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @returns {Promise<void>}
+/** 
+ * @desc Update a task by ID (PUT - full update) 
+ * @route PUT /api/tasks/:id 
  */
 const updateTask = asyncHandler(async (req, res) => {
-    const task = await Task.findById(req.params.id);
+    const task = await verifyTaskOwnership(req.params.id, req.user.userId, res);
 
-    if (!task) {
-        res.status(STATUS_CODES.NOT_FOUND);
-        throw new Error('Task not found');
-    }
+    const updatedFields = validateAndBuildFields(req.body);
 
-    // Verify if the logged-in user matches the task owner
-    if (task.user_id.toString() !== req.user.userId) {
-        res.status(STATUS_CODES.FORBIDDEN);
-        throw new Error('User not authorized to update other users task');
-    }
-
-    // Destruture the fields from the request body
-    const { title, description, status, type, deadline } = req.body;
-
-    const updatedFields = {};
-    // Check and validate each field before adding it to the updatedFields object
-    if (title) {
-        if (title.trim().length < 2 || title.trim().length > 25) {
-            res.status(STATUS_CODES.VALIDATION_ERROR);
-            throw new Error('Task title must be between 2 and 25 characters');
-        }
-        updatedFields.taskTitle = title.trim();
-    }
-    if (description) {
-        if (description.trim().length > 100) {
-            res.status(STATUS_CODES.VALIDATION_ERROR);
-            throw new Error('Task description must be less than 100 characters');
-        }
-        updatedFields.taskDescription = description.trim();
-    }
-    if (status) updatedFields.taskStatus = status;
-    if (type) updatedFields.type = type;
-    if (deadline) updatedFields.taskDeadline = new Date(deadline);
-
-    // Update the task with the new fields
     const updatedTask = await Task.findByIdAndUpdate(
-        req.params.id,
-        { $set: updatedFields }, // $set operator to update only the specified fields
-        { new: true, runValidators: true }); // return the updated document
+        task._id,
+        { $set: updatedFields },
+        { new: true, runValidators: true }
+    );
 
     res.status(STATUS_CODES.OK).json({
         success: true,
         message: "Task updated successfully",
-        data: updatedTask
+        data: updatedTask,
+    });
+});
+
+/** 
+ * @desc Partially update a task by ID (PATCH) 
+ * @route PATCH /api/tasks/:id 
+ */
+const partialUpdateTask = asyncHandler(async (req, res) => {
+    const task = await verifyTaskOwnership(req.params.id, req.user.userId, res);
+
+    const updatedFields = validateAndBuildFields(req.body);
+
+    const updatedTask = await Task.findByIdAndUpdate(
+        task._id,
+        { $set: updatedFields },
+        { new: true, runValidators: true }
+    );
+
+    res.status(STATUS_CODES.OK).json({
+        success: true,
+        message: "Task partially updated successfully",
+        data: updatedTask,
     });
 });
 
@@ -264,12 +285,15 @@ const updateTask = asyncHandler(async (req, res) => {
  * @desc Delete all tasks belonging to the authenticated user.
  * @purpose To easily remove list of tasks displayed in the UI
  * @route DELETE /api/tasks
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @returns {Promise<void>}
+ * @Note the frontend will delete it by status AND depending on which panel of type it is (work or personal)
+ * When the frontend clicks on delete all tasks button, it will show a modal to confirm the action and it must choose the status to delete
+ * If no status is provided, it will delete all tasks based on the type (depending on which panel of type it is (work or personal))
  */
 const deleteAllTasks = asyncHandler(async (req, res) => {
-    const tasks = await Task.find({ user_id: req.userId }).select("_id");
+    const type = req.query.type;
+    const status = req.query.status;
+
+    const tasks = await Task.find({ user_id: req.user.userId }).select("_id");
 
     if (tasks.length === 0) {
         return res.status(STATUS_CODES.OK).json({
@@ -279,19 +303,16 @@ const deleteAllTasks = asyncHandler(async (req, res) => {
         });
     }
 
-    const { status } = req.query;
-
-    const validStatus = ["pending", "in-progress", "completed"];
-
-    if (status && !validStatus.includes(status)) {
+    if (status && !VALID_STATUS.includes(status)) {
         return res.status(STATUS_CODES.VALIDATION_ERROR).
-            json({ message: `Invalid status. Valid statuses are: ${validStatus.join(", ")}` })
+            json({ message: `Invalid status. Valid statuses are: ${VALID_STATUS.join(", ")}` })
     }
 
-    const filter = { user_id: req.userId };
-    if (status) filter.status = status.trim();
+    const filter = { user_id: req.user.userId };
+    if (status) filter.taskStatus = status.trim();
+    if (type) filter.type = type.trim();
 
-    const deletedTasks = await Task.deleteMany({ user_id: req.userId, status: status.trim() });
+    const deletedTasks = await Task.deleteMany(filter);
 
     res.status(STATUS_CODES.OK).json({
         success: true,
@@ -303,9 +324,6 @@ const deleteAllTasks = asyncHandler(async (req, res) => {
 /**
  * @desc Delete a task by ID. Only the task owner may delete.
  * @route DELETE /api/tasks/:id
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @returns {Promise<void>}
  */
 const deleteTask = asyncHandler(async (req, res) => {
     const task = await Task.findById(req.params.id).select("user_id");
@@ -342,10 +360,6 @@ const deleteTask = asyncHandler(async (req, res) => {
  * @route GET /api/tasks/dashboard/:type
  *   Where `:type` is one of "work" | "personal" | "all"
  *
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @returns {Promise<void>} 200 - Dashboard data including `summary` and `progressChart`.
- *
  * @example
  * // All task types
  * // GET /api/tasks/dashboard/all
@@ -363,8 +377,7 @@ const deleteTask = asyncHandler(async (req, res) => {
  * - Overdue tasks are tasks with a past deadline that are not completed.
  */
 const dashboard = asyncHandler(async (req, res) => {
-    const type  = req.params.type;
-    if (type) type = type.toLowerCase();
+    const type = req.params.type ? req.params.type.toLowerCase() : "all";
 
     const validTypes = ["all", "work", "personal"];
     if (type && !validTypes.includes(type)) {
@@ -374,7 +387,7 @@ const dashboard = asyncHandler(async (req, res) => {
 
     // Build query
     const query= { user_id: req.user.userId };
-    if (type && type !== "all") query.type = type;
+    if (type) query.type = type.trim();
 
     const tasks = await Task.find(query);
 
@@ -436,4 +449,4 @@ const dashboard = asyncHandler(async (req, res) => {
     });
 });
 
-export { getTasks, createTask, getTaskById, updateTask, deleteAllTasks, deleteTask, dashboard };
+export { getTasks, createTask, getTaskById, updateTask, partialUpdateTask, deleteAllTasks, deleteTask, dashboard };
