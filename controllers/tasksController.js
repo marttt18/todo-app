@@ -387,7 +387,7 @@ const dashboard = asyncHandler(async (req, res) => {
 
     // Build query
     const query= { user_id: req.user.userId };
-    if (type) query.type = type.trim();
+    if (type && type !== "all") query.type = type.trim();
 
     const tasks = await Task.find(query);
 
