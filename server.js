@@ -1,5 +1,6 @@
 import express from 'express';
 import "dotenv/config";
+import requestLogger from './middleware/requestLogger.js';
 import taskRoutes from './routes/taskRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import dbConnection from './config/dbConnection.js';
@@ -13,8 +14,8 @@ const app = express();
 
 const port = process.env.PORT || 5000;
 
-// Middleware to parse JSON bodies
-// This is necessary to handle JSON requests
+// Middlewares
+app.use(requestLogger);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // to handle URL encoded data: what is this for?
 
@@ -24,13 +25,13 @@ app.use("/api/tasks", taskRoutes);
 
 // If there is no route found, return 404 handler
 app.use((req, res) => {
-    res.status(STATUS_CODES.NOT_FOUND);
-    throw new Error(`Route ${req.originalUrl} not found`);
+  res.status(STATUS_CODES.NOT_FOUND);
+  throw new Error(`Route ${req.originalUrl} not found`);
 });
 
 app.use(errorHandler);
 
 // Start the server
 app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
+  console.log(`Server is running on port ${port}`);
 });
