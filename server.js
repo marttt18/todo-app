@@ -6,9 +6,13 @@ import userRoutes from './routes/userRoutes.js';
 import dbConnection from './config/dbConnection.js';
 import errorHandler from './middleware/errorHandler.js';
 import { STATUS_CODES } from './constants.js';
+import { startNotificationJob } from './cron/notificationCron.js';
 
 // Connect to the database
 dbConnection();
+
+// Start the scheduled notification job
+startNotificationJob();
 
 const app = express();
 
