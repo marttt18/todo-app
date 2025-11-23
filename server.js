@@ -7,6 +7,7 @@ import dbConnection from './config/dbConnection.js';
 import errorHandler from './middleware/errorHandler.js';
 import { STATUS_CODES } from './constants.js';
 import { startNotificationJob } from './cron/notificationCron.js';
+import cors from 'cors';
 
 // Connect to the database
 dbConnection();
@@ -19,9 +20,9 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 // Middlewares
+app.use(cors());
 app.use(requestLogger);
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // to handle URL encoded data: what is this for?
 
 // Routes
 app.use("/api/users", userRoutes);
