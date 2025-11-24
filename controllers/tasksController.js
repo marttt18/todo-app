@@ -386,7 +386,7 @@ const dashboard = asyncHandler(async (req, res) => {
     }
 
     // Build query
-    const query= { user_id: req.user.userId };
+    const query = { user_id: req.user.userId };
     if (type && type !== "all") query.type = type.trim();
 
     const tasks = await Task.find(query);
@@ -400,6 +400,7 @@ const dashboard = asyncHandler(async (req, res) => {
 
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // midnight today
+    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59); // end of today
 
     for (let task of tasks) {
         const taskDeadline = task.taskDeadline ? new Date(task.taskDeadline) : null;
@@ -412,7 +413,7 @@ const dashboard = asyncHandler(async (req, res) => {
         }
 
         // Overdue tasks (past deadline and not completed)
-        if (taskDeadline && taskDeadline < today && task.taskStatus !== "completed") {
+        if (taskDeadline && taskDeadline < now && task.taskStatus !== "completed") {
             overdueTasksCount++;
             tasksOverdue.push(task);
         }
@@ -420,9 +421,8 @@ const dashboard = asyncHandler(async (req, res) => {
         // Tasks for today
         if (
             taskDeadline &&
-            taskDeadline.getFullYear() === today.getFullYear() &&
-            taskDeadline.getMonth() === today.getMonth() &&
-            taskDeadline.getDate() === today.getDate()
+            taskDeadline >= now &&
+            taskDeadline <= endOfToday
         ) {
             todayTasks.push(task);
         }
